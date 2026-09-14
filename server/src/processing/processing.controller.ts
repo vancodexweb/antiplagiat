@@ -7,6 +7,9 @@ import { ANALYZE_DOCUMENT_PATTERN } from '../queue/queue.constants';
 import type { AnalyzeDocumentMessage } from '../queue/queue-publisher.service';
 import { PlagiarismService } from '../pipeline/plagiarism.service';
 import { ParaphraseService } from '../pipeline/paraphrase.service';
+import { GrammarService } from '../grammar/grammar.service';
+import { StyleService } from '../style/style.service';
+import { SpamService } from '../style/spam.service';
 
 interface PipelineStage {
   name: string;
@@ -28,6 +31,9 @@ export class ProcessingController {
     private readonly config: ConfigService,
     private readonly plagiarismService: PlagiarismService,
     private readonly paraphraseService: ParaphraseService,
+    private readonly grammarService: GrammarService,
+    private readonly styleService: StyleService,
+    private readonly spamService: SpamService,
   ) {}
 
   @EventPattern(ANALYZE_DOCUMENT_PATTERN)
@@ -63,6 +69,9 @@ export class ProcessingController {
     const stages: PipelineStage[] = [
       { name: 'plagiarism', run: () => this.plagiarismService.analyze(document.id, document.rawText) },
       { name: 'paraphrase', run: () => this.paraphraseService.analyze(document.id, document.rawText) },
+      { name: 'grammar', run: () => this.grammarService.analyze(document.id, document.rawText) },
+      { name: 'style', run: () => this.styleService.analyze(document.id, document.rawText) },
+      { name: 'spam', run: () => this.spamService.analyze(document.id, document.rawText) },
     ];
 
     for (const stage of stages) {

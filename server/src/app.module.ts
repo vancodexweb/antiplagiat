@@ -7,6 +7,8 @@ import { RedisModule } from './redis/redis.module';
 import { SettingsModule } from './settings/settings.module';
 import { DocumentsModule } from './documents/documents.module';
 import { CorpusModule } from './corpus/corpus.module';
+import { JunkWordsModule } from './junk-words/junk-words.module';
+import { DictionarySeedModule } from './dictionary-seed/dictionary-seed.module';
 import { HealthController } from './health/health.controller';
 
 @Module({
@@ -27,6 +29,8 @@ import { HealthController } from './health/health.controller';
     SettingsModule,
     DocumentsModule,
     CorpusModule,
+    JunkWordsModule,
+    DictionarySeedModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
