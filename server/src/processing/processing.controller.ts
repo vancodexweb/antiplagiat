@@ -5,12 +5,18 @@ import { DocumentStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ANALYZE_DOCUMENT_PATTERN } from '../queue/queue.constants';
 import type { AnalyzeDocumentMessage } from '../queue/queue-publisher.service';
+import { PlagiarismService } from '../pipeline/plagiarism.service';
+
+interface PipelineStage {
+  name: string;
+  run: () => Promise<void>;
+}
 
 /**
- * Консьюмер очереди RabbitMQ (раздел 2, пункты 4-5 ТЗ). На Шаге 3 пайплайн
- * анализа — заглушка (runPipeline ничего не делает), но статусная машина
- * PENDING -> PROCESSING -> DONE/FAILED и логика повторов/DLQ уже реальные,
- * чтобы следующие шаги просто подключали новые стадии в runPipeline.
+ * Консьюмер очереди RabbitMQ (раздел 2, пункты 4-5 ТЗ). Статусная машина
+ * PENDING -> PROCESSING -> DONE/FAILED и логика повторов/DLQ реализованы
+ * на Шаге 3; стадии реального анализа (шинглы — Шаг 4, эмбеддинги — Шаг 5
+ * и т.д.) подключаются в runPipeline по мере продвижения по чек-листу.
  */
 @Controller()
 export class ProcessingController {
@@ -19,6 +25,7 @@ export class ProcessingController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly plagiarismService: PlagiarismService,
   ) {}
 
   @EventPattern(ANALYZE_DOCUMENT_PATTERN)
@@ -40,7 +47,7 @@ export class ProcessingController {
         data: { status: DocumentStatus.PROCESSING, failureReason: null, failedStage: null },
       });
 
-      await this.runPipeline(documentId);
+      await this.runPipeline(document);
 
       await this.prisma.document.update({ where: { id: documentId }, data: { status: DocumentStatus.DONE } });
       channel.ack(originalMsg);
@@ -50,10 +57,19 @@ export class ProcessingController {
     }
   }
 
-  // Шаг 3: реального анализа ещё нет — стадии 4-9 подключатся сюда по
-  // мере продвижения по чек-листу (раздел 12).
-  private async runPipeline(_documentId: string): Promise<void> {
-    return;
+  private async runPipeline(document: { id: string; rawText: string }): Promise<void> {
+    const stages: PipelineStage[] = [
+      { name: 'plagiarism', run: () => this.plagiarismService.analyze(document.id, document.rawText) },
+    ];
+
+    for (const stage of stages) {
+      try {
+        await stage.run();
+      } catch (error) {
+        await this.prisma.document.update({ where: { id: document.id }, data: { failedStage: stage.name } });
+        throw error;
+      }
+    }
   }
 
   private async handleFailure(

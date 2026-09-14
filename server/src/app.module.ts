@@ -3,8 +3,10 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { PrismaModule } from './prisma/prisma.module';
+import { RedisModule } from './redis/redis.module';
 import { SettingsModule } from './settings/settings.module';
 import { DocumentsModule } from './documents/documents.module';
+import { CorpusModule } from './corpus/corpus.module';
 import { HealthController } from './health/health.controller';
 
 @Module({
@@ -21,8 +23,10 @@ import { HealthController } from './health/health.controller';
       ],
     }),
     PrismaModule,
+    RedisModule,
     SettingsModule,
     DocumentsModule,
+    CorpusModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
