@@ -1,0 +1,198 @@
+// Единая Prisma-схема для сервисов api и worker (раздел 5 ТЗ, расширенная
+// служебной моделью SystemConfig — под настраиваемые параметры вроде
+// норматива страницы, которых нет в исходном перечне моделей).
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+// Начиная с Prisma 7 URL подключения задаётся не здесь, а в prisma.config.ts
+// (для Migrate) и через driver adapter при создании PrismaClient (см.
+// PrismaService) — см. https://pris.ly/d/config-datasource
+datasource db {
+  provider   = "postgresql"
+  extensions = [vector]
+}
+
+model User {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  documents Document[]
+  createdAt DateTime   @default(now())
+}
+
+model Document {
+  id                String               @id @default(cuid())
+  authorId          String?
+  author            User?                @relation(fields: [authorId], references: [id])
+  originalName      String
+  mimeType          String
+  contentHash       String               @unique
+  rawText           String
+  charCount         Int
+  charCountNoSpaces Int
+  wordCount         Int
+  sentenceCount     Int
+  paragraphCount    Int                  @default(0)
+  pageCount         Int
+  avgSentenceLength Float                @default(0)
+  readingTimeMinutes Float               @default(0)
+  language          String?
+  languageBreakdown Json?
+  status            DocumentStatus       @default(PENDING)
+  failureReason     String?
+  failedStage       String?
+  retryCount        Int                  @default(0)
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  result            AnalysisResult?
+  shingles          Shingle[]
+  sentences         SentenceEmbedding[]
+  tamperingFlags    TamperingFlag[]
+  metadata          DocumentMetadata?
+
+  @@index([authorId])
+  @@index([status])
+}
+
+enum DocumentStatus {
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+}
+
+// Документы эталонного корпуса, с которым сверяются загруженные работы
+// (POST /api/corpus). Не связаны с пользовательской моделью Document,
+// потому что корпус — это отдельный набор источников "для сравнения",
+// а не проверяемые документы.
+model CorpusDocument {
+  id                String              @id @default(cuid())
+  title             String
+  sourceUrl         String?
+  contentHash       String              @unique
+  rawText           String
+  createdAt         DateTime            @default(now())
+  shingles          CorpusShingle[]
+  sentences         CorpusSentenceEmbedding[]
+}
+
+model Shingle {
+  id         String   @id @default(cuid())
+  hash       String
+  position   Int      @default(0)
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentId String
+
+  @@index([hash])
+  @@index([documentId])
+}
+
+model CorpusShingle {
+  id         String         @id @default(cuid())
+  hash       String
+  position   Int            @default(0)
+  document   CorpusDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentId String
+
+  @@index([hash])
+  @@index([documentId])
+}
+
+model SentenceEmbedding {
+  id         String                     @id @default(cuid())
+  document   Document                   @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentId String
+  sentence   String
+  position   Int                        @default(0)
+  embedding  Unsupported("vector(384)")
+
+  @@index([documentId])
+}
+
+model CorpusSentenceEmbedding {
+  id         String                     @id @default(cuid())
+  document   CorpusDocument             @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentId String
+  sentence   String
+  position   Int                        @default(0)
+  embedding  Unsupported("vector(384)")
+
+  @@index([documentId])
+}
+
+model AnalysisResult {
+  id                String   @id @default(cuid())
+  document          Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentId        String   @unique
+  originalityPct    Float    @default(0)
+  plagiarismPct     Float    @default(0)
+  paraphrasePct     Float    @default(0)
+  selfPlagiarismPct Float    @default(0)
+  citedPct          Float    @default(0)
+  spamPct           Float    @default(0)
+  junkWordsPct      Float    @default(0)
+  grammarErrors     Int      @default(0)
+  readabilityScore  Float    @default(0)
+  aiProbability     Float    @default(0)
+  aiVerdict         Boolean  @default(false)
+  detailsJson       Json
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model TamperingFlag {
+  id         String   @id @default(cuid())
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentId String
+  type       String   // HOMOGLYPH | ZERO_WIDTH | HIDDEN_TEXT | TINY_FONT
+  position   Int?
+  details    String?
+  createdAt  DateTime @default(now())
+
+  @@index([documentId])
+}
+
+model DocumentMetadata {
+  id            String    @id @default(cuid())
+  document      Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentId    String    @unique
+  createdAtRaw  DateTime?
+  modifiedAtRaw DateTime?
+  author        String?
+  producer      String?
+  suspicious    Boolean   @default(false)
+  suspicionNote String?
+}
+
+model DetectorWeight {
+  id      String  @id @default(cuid())
+  feature String  @unique
+  weight  Float
+  enabled Boolean @default(true)
+}
+
+model JunkWord {
+  id   String @id @default(cuid())
+  word String @unique
+}
+
+// Редактируемый словарь канцелярских/штампованных оборотов (разделы 3.3 и
+// 3.5) — отдельная модель, т.к. семантика отличается от "мусорных слов"
+// (JunkWord — филлеры, ClicheWord — канцелярит/типичные ИИ-обороты).
+model ClicheWord {
+  id      String @id @default(cuid())
+  phrase  String @unique
+  // Категория: AI_CLICHE — типично-ИИ обороты (3.3), BUREAUCRATIC — канцелярит (3.5)
+  category String @default("AI_CLICHE")
+}
+
+// Универсальное хранилище редактируемых параметров системы (норматив
+// страницы, флаги опциональных фич и т.п.), чтобы не хардкодить их в коде
+// (см. раздел 10 ТЗ).
+model SystemConfig {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
