@@ -9,6 +9,7 @@ import { BasicMetricsService } from './metrics/basic-metrics.service';
 import { LanguageDetectionService } from './language/language-detection.service';
 import { DocumentResponseDto } from './dto/document-response.dto';
 import { DocumentNotFoundException, FileTooLargeException } from '../common/exceptions/app.exceptions';
+import { QueuePublisherService } from '../queue/queue-publisher.service';
 
 type DocumentWithResult = Prisma.DocumentGetPayload<{ include: { result: true } }>;
 
@@ -21,6 +22,7 @@ export class DocumentsService {
     private readonly languageDetection: LanguageDetectionService,
     private readonly settings: SettingsService,
     private readonly configService: ConfigService,
+    private readonly queuePublisher: QueuePublisherService,
   ) {}
 
   async uploadDocument(file: Express.Multer.File, authorEmail?: string): Promise<DocumentResponseDto> {
@@ -63,6 +65,10 @@ export class DocumentsService {
       },
       include: { result: true },
     });
+
+    // Синхронная часть (раздел 2, пункт 3) сделана — дальше документ
+    // обрабатывается асинхронно воркером через RabbitMQ.
+    this.queuePublisher.publishAnalysisTask(document.id);
 
     return this.toResponseDto(document);
   }
