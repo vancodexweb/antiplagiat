@@ -7,6 +7,8 @@ import { ShinglingService } from '../shingling/shingling.service';
 import { LshIndexService } from '../shingling/lsh-index.service';
 import { computeMinHashSignature } from '../shingling/minhash';
 import { chunkShingles, CHUNK_SIZE, CHUNK_STRIDE } from '../shingling/chunk-shingles';
+import { NlpClientService } from '../nlp-client/nlp-client.service';
+import { VectorSearchService } from '../vector-search/vector-search.service';
 import { CorpusDocumentResponseDto } from './dto/corpus-document-response.dto';
 
 type CorpusDocumentWithCount = Prisma.CorpusDocumentGetPayload<{ include: { _count: { select: { shingles: true } } } }>;
@@ -18,6 +20,8 @@ export class CorpusService {
     private readonly extraction: TextExtractionService,
     private readonly shingling: ShinglingService,
     private readonly lshIndex: LshIndexService,
+    private readonly nlpClient: NlpClientService,
+    private readonly vectorSearch: VectorSearchService,
   ) {}
 
   async addDocument(file: Express.Multer.File, title: string, sourceUrl?: string): Promise<CorpusDocumentResponseDto> {
@@ -56,6 +60,11 @@ export class CorpusService {
       const signature = computeMinHashSignature(chunk.map((s) => s.hash));
       await this.lshIndex.indexCorpusDocument(corpusDocument.id, signature);
     }
+
+    // Эмбеддинги предложений источника — для детекции перефразирования
+    // (раздел 3.2 ТЗ), сверяются через pgvector в ParaphraseService.
+    const sentences = await this.nlpClient.embedSentences(text);
+    await this.vectorSearch.replaceSentences('CorpusSentenceEmbedding', corpusDocument.id, sentences);
 
     return this.toDto(corpusDocument);
   }

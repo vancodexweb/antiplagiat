@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ANALYZE_DOCUMENT_PATTERN } from '../queue/queue.constants';
 import type { AnalyzeDocumentMessage } from '../queue/queue-publisher.service';
 import { PlagiarismService } from '../pipeline/plagiarism.service';
+import { ParaphraseService } from '../pipeline/paraphrase.service';
 
 interface PipelineStage {
   name: string;
@@ -26,6 +27,7 @@ export class ProcessingController {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly plagiarismService: PlagiarismService,
+    private readonly paraphraseService: ParaphraseService,
   ) {}
 
   @EventPattern(ANALYZE_DOCUMENT_PATTERN)
@@ -60,6 +62,7 @@ export class ProcessingController {
   private async runPipeline(document: { id: string; rawText: string }): Promise<void> {
     const stages: PipelineStage[] = [
       { name: 'plagiarism', run: () => this.plagiarismService.analyze(document.id, document.rawText) },
+      { name: 'paraphrase', run: () => this.paraphraseService.analyze(document.id, document.rawText) },
     ];
 
     for (const stage of stages) {

@@ -2,19 +2,35 @@
 nlp-service — вся тяжёлая NLP-логика проекта (лемматизация, эмбеддинги,
 грамматика, OCR, читаемость). worker обращается сюда по HTTP; сам сервис
 состояния не хранит (см. раздел 0 ТЗ).
-
-На Шаге 1 это пока пустая заглушка с единственным рабочим эндпоинтом
-/health — остальные роутеры подключаются по мере продвижения по чек-листу
-(раздел 12).
 """
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
+
+from app.routers import embeddings, lemmatize
+from app.services.embeddings import get_model
+from app.services.lemmatizer import get_morph
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Прогреваем модель эмбеддингов и словари pymorphy3 при старте, чтобы
+    # первый реальный запрос не ждал их загрузки (несколько секунд).
+    get_model()
+    get_morph()
+    yield
+
 
 app = FastAPI(
     title="Antiplagiat NLP Service",
     description="Внутренний NLP-сервис: лемматизация, эмбеддинги, грамматика, OCR, читаемость.",
     version="1.0.0",
+    lifespan=lifespan,
 )
+
+app.include_router(lemmatize.router)
+app.include_router(embeddings.router)
 
 
 @app.get("/health", summary="Проверка живости сервиса")
