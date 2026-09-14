@@ -35,7 +35,7 @@ export class ParaphraseService {
       return;
     }
 
-    const threshold = Number(this.config.get('PARAPHRASE_SIMILARITY_THRESHOLD', '0.85'));
+    const threshold = Number(this.config.get('PARAPHRASE_SIMILARITY_THRESHOLD', '0.75'));
     const sourceCounts = new Map<string, ParaphraseSource>();
     let matchedCount = 0;
 
