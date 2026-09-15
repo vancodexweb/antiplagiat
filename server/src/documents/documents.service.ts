@@ -10,8 +10,14 @@ import { LanguageDetectionService } from './language/language-detection.service'
 import { DocumentResponseDto } from './dto/document-response.dto';
 import { DocumentNotFoundException, FileTooLargeException } from '../common/exceptions/app.exceptions';
 import { QueuePublisherService } from '../queue/queue-publisher.service';
+import { TamperingService } from '../tampering/tampering.service';
+import { DocumentMetadataService } from '../document-metadata/document-metadata.service';
+import { DocumentDetailsDto } from './dto/document-details.dto';
 
 type DocumentWithResult = Prisma.DocumentGetPayload<{ include: { result: true } }>;
+type DocumentWithDetails = Prisma.DocumentGetPayload<{
+  include: { result: true; tamperingFlags: true; metadata: true };
+}>;
 
 @Injectable()
 export class DocumentsService {
@@ -23,6 +29,8 @@ export class DocumentsService {
     private readonly settings: SettingsService,
     private readonly configService: ConfigService,
     private readonly queuePublisher: QueuePublisherService,
+    private readonly tamperingService: TamperingService,
+    private readonly documentMetadataService: DocumentMetadataService,
   ) {}
 
   async uploadDocument(file: Express.Multer.File, authorEmail?: string): Promise<DocumentResponseDto> {
@@ -45,6 +53,12 @@ export class DocumentsService {
 
     const authorId = authorEmail ? await this.resolveAuthorId(authorEmail) : undefined;
 
+    // Попытки обмана системы (раздел 3.7) и метаданные документа (3.8) —
+    // синхронно при загрузке, пока доступен исходный файл (после
+    // извлечения текста буфер не сохраняется).
+    const tamperingFindings = await this.tamperingService.scan(file.buffer, mimeType, text);
+    const metadata = await this.documentMetadataService.extract(file.buffer, mimeType);
+
     const document = await this.prisma.document.create({
       data: {
         authorId,
@@ -62,6 +76,8 @@ export class DocumentsService {
         readingTimeMinutes: metrics.readingTimeMinutes,
         language: dominant === 'und' ? null : dominant,
         languageBreakdown: breakdown as Prisma.InputJsonValue,
+        tamperingFlags: tamperingFindings.length > 0 ? { createMany: { data: tamperingFindings } } : undefined,
+        metadata: metadata ? { create: metadata } : undefined,
       },
       include: { result: true },
     });
@@ -79,6 +95,17 @@ export class DocumentsService {
       throw new DocumentNotFoundException(id);
     }
     return this.toResponseDto(document);
+  }
+
+  async getDetails(id: string): Promise<DocumentDetailsDto> {
+    const document = await this.prisma.document.findUnique({
+      where: { id },
+      include: { result: true, tamperingFlags: true, metadata: true },
+    });
+    if (!document) {
+      throw new DocumentNotFoundException(id);
+    }
+    return this.toDetailsDto(document);
   }
 
   private assertFileSize(file: Express.Multer.File): void {
@@ -130,6 +157,29 @@ export class DocumentsService {
             aiProbability: document.result.aiProbability,
             aiVerdict: document.result.aiVerdict,
             createdAt: document.result.createdAt,
+          }
+        : null,
+    };
+  }
+
+  private toDetailsDto(document: DocumentWithDetails): DocumentDetailsDto {
+    return {
+      id: document.id,
+      status: document.status,
+      details: (document.result?.detailsJson as Record<string, unknown> | undefined) ?? null,
+      tamperingFlags: document.tamperingFlags.map((flag) => ({
+        type: flag.type,
+        position: flag.position,
+        details: flag.details,
+      })),
+      metadata: document.metadata
+        ? {
+            createdAtRaw: document.metadata.createdAtRaw,
+            modifiedAtRaw: document.metadata.modifiedAtRaw,
+            author: document.metadata.author,
+            producer: document.metadata.producer,
+            suspicious: document.metadata.suspicious,
+            suspicionNote: document.metadata.suspicionNote,
           }
         : null,
     };
