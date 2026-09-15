@@ -15,6 +15,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # первый пользовательский запрос ждёт загрузки модели.
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')"
 
+# Модель уже в образе — без этого huggingface_hub на каждом старте лезет в
+# сеть проверить, нет ли новой версии, и при недоступном интернете долго
+# ретраит перед тем, как откатиться на локальный кэш.
+ENV HF_HUB_OFFLINE=1
+ENV TRANSFORMERS_OFFLINE=1
+
 COPY app ./app
 
 EXPOSE 8001

@@ -34,6 +34,7 @@ export class AiDetectorService {
     };
 
     const scores: Record<string, number> = {};
+    const weightsUsed: Record<string, number> = {};
     let weightedSum = 0;
     let weightTotal = 0;
 
@@ -45,6 +46,7 @@ export class AiDetectorService {
       if (Number.isNaN(score)) continue;
 
       scores[feature.key] = Math.round(score * 1000) / 1000;
+      weightsUsed[feature.key] = weight;
       weightedSum += score * weight;
       weightTotal += weight;
     }
@@ -53,12 +55,7 @@ export class AiDetectorService {
     const threshold = Number(this.config.get('AI_VERDICT_THRESHOLD', '0.6'));
     const aiVerdict = aiProbability >= threshold;
 
-    await this.results.mergeDetails(
-      documentId,
-      'aiDetector',
-      { scores, weightsUsed: Object.fromEntries(weightByFeature) },
-      { aiProbability, aiVerdict },
-    );
+    await this.results.mergeDetails(documentId, 'aiDetector', { scores, weightsUsed }, { aiProbability, aiVerdict });
 
     this.logger.log(`Документ ${documentId}: aiProbability=${aiProbability} verdict=${aiVerdict}`);
   }
