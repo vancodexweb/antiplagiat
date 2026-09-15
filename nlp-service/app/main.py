@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.routers import embeddings, lemmatize, perplexity
+from app.routers import embeddings, lemmatize, ocr, perplexity
 from app.services.embeddings import get_model
 from app.services.lemmatizer import get_morph
 from app.services.perplexity import is_enabled as perplexity_enabled
@@ -38,6 +38,8 @@ app = FastAPI(
 
 app.include_router(lemmatize.router)
 app.include_router(embeddings.router)
+app.include_router(ocr.router)
+app.include_router(perplexity.router)
 
 
 @app.get("/health", summary="Проверка живости сервиса")

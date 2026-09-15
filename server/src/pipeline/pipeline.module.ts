@@ -8,6 +8,7 @@ import { VectorSearchModule } from '../vector-search/vector-search.module';
 import { GrammarModule } from '../grammar/grammar.module';
 import { StyleModule } from '../style/style.module';
 import { AiDetectorModule } from '../ai-detector/ai-detector.module';
+import { ExternalSearchModule } from '../external-search/external-search.module';
 
 @Module({
   imports: [
@@ -18,8 +19,9 @@ import { AiDetectorModule } from '../ai-detector/ai-detector.module';
     GrammarModule,
     StyleModule,
     AiDetectorModule,
+    ExternalSearchModule,
   ],
   providers: [PlagiarismService, ParaphraseService],
-  exports: [PlagiarismService, ParaphraseService, GrammarModule, StyleModule, AiDetectorModule],
+  exports: [PlagiarismService, ParaphraseService, GrammarModule, StyleModule, AiDetectorModule, ExternalSearchModule],
 })
 export class PipelineModule {}

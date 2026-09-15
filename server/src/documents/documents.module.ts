@@ -8,9 +8,10 @@ import { SettingsModule } from '../settings/settings.module';
 import { QueueModule } from '../queue/queue.module';
 import { TamperingModule } from '../tampering/tampering.module';
 import { DocumentMetadataModule } from '../document-metadata/document-metadata.module';
+import { NlpClientModule } from '../nlp-client/nlp-client.module';
 
 @Module({
-  imports: [SettingsModule, QueueModule, TamperingModule, DocumentMetadataModule],
+  imports: [SettingsModule, QueueModule, TamperingModule, DocumentMetadataModule, NlpClientModule],
   controllers: [DocumentsController],
   providers: [DocumentsService, TextExtractionService, BasicMetricsService, LanguageDetectionService],
   exports: [DocumentsService, TextExtractionService, BasicMetricsService, LanguageDetectionService],

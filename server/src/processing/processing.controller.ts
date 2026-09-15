@@ -11,6 +11,7 @@ import { GrammarService } from '../grammar/grammar.service';
 import { StyleService } from '../style/style.service';
 import { SpamService } from '../style/spam.service';
 import { AiDetectorService } from '../ai-detector/ai-detector.service';
+import { ExternalSearchService } from '../external-search/external-search.service';
 
 interface PipelineStage {
   name: string;
@@ -36,6 +37,7 @@ export class ProcessingController {
     private readonly styleService: StyleService,
     private readonly spamService: SpamService,
     private readonly aiDetectorService: AiDetectorService,
+    private readonly externalSearchService: ExternalSearchService,
   ) {}
 
   @EventPattern(ANALYZE_DOCUMENT_PATTERN)
@@ -75,6 +77,7 @@ export class ProcessingController {
       { name: 'style', run: () => this.styleService.analyze(document.id, document.rawText) },
       { name: 'spam', run: () => this.spamService.analyze(document.id, document.rawText) },
       { name: 'aiDetector', run: () => this.aiDetectorService.analyze(document.id, document.rawText) },
+      { name: 'externalSearch', run: () => this.externalSearchService.analyze(document.id, document.rawText) },
     ];
 
     for (const stage of stages) {

@@ -7,6 +7,7 @@ export interface ShingleData {
   hash: number; // 32-битный хеш, используется для MinHash
   hashHex: string; // строковое представление для хранения в БД
   position: number;
+  phrase: string; // исходный текст шингла — нужен для запросов ExternalSearchProvider
 }
 
 /**
@@ -33,7 +34,7 @@ export class ShinglingService {
     for (let i = 0; i <= words.length - size; i++) {
       const phrase = words.slice(i, i + size).join(' ');
       const hash = fnv1a(phrase);
-      shingles.push({ hash, hashHex: hash.toString(16).padStart(8, '0'), position: i });
+      shingles.push({ hash, hashHex: hash.toString(16).padStart(8, '0'), position: i, phrase });
     }
     return shingles;
   }

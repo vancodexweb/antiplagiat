@@ -39,3 +39,7 @@ class PerplexityResponse(BaseModel):
         ...,
         description="Перплексия текста по языковой модели — чем ниже, тем 'предсказуемее' текст для модели (часто характерно для ИИ-сгенерированного)",
     )
+
+
+class OcrResponse(BaseModel):
+    text: str = Field(..., description="Текст, распознанный OCR по всем страницам документа")

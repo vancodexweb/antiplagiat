@@ -2,6 +2,16 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# tesseract-ocr + языковые пакеты и poppler-utils (нужен pdf2image для
+# рендеринга страниц PDF в изображения) — OCR для сканированных документов
+# (раздел 3.9 ТЗ).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      tesseract-ocr \
+      tesseract-ocr-rus \
+      tesseract-ocr-eng \
+      poppler-utils \
+    && rm -rf /var/lib/apt/lists/*
+
 # torch ставим отдельно с CPU-only индексом — иначе pip как зависимость
 # sentence-transformers подтянет полную сборку с CUDA-библиотеками
 # (несколько лишних гигабайт), которые в этом деплое не нужны.

@@ -51,6 +51,29 @@ export class NlpClientService {
     return data.perplexity;
   }
 
+  // OCR — опциональный модуль (раздел 3.9): null означает, что он выключен
+  // на стороне nlp-service (ENABLE_OCR=false, HTTP 503).
+  async ocrPdf(buffer: Buffer): Promise<string | null> {
+    const formData = new FormData();
+    formData.append('file', new Blob([buffer], { type: 'application/pdf' }), 'document.pdf');
+
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}/ocr`, { method: 'POST', body: formData });
+    } catch (error) {
+      throw new NlpServiceUnavailableException({
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    if (response.status === 503) return null;
+    if (!response.ok) {
+      throw new NlpServiceUnavailableException({ status: response.status });
+    }
+    const data = (await response.json()) as { text: string };
+    return data.text;
+  }
+
   private async post<T>(path: string, body: unknown): Promise<T> {
     const response = await this.rawPost(path, body);
     if (!response.ok) {
