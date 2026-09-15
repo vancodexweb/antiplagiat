@@ -38,10 +38,30 @@ export class NlpClientService {
     return data.tokens;
   }
 
+  // Перплексия — тяжёлая опциональная фича (раздел 3.3): null означает,
+  // что она выключена на стороне nlp-service (ENABLE_PERPLEXITY_FEATURE=false,
+  // HTTP 503), а не ошибку — вызывающий код должен просто пропустить фичу.
+  async computePerplexity(text: string): Promise<number | null> {
+    const response = await this.rawPost('/perplexity', { text });
+    if (response.status === 503) return null;
+    if (!response.ok) {
+      throw new NlpServiceUnavailableException({ status: response.status });
+    }
+    const data = (await response.json()) as { perplexity: number };
+    return data.perplexity;
+  }
+
   private async post<T>(path: string, body: unknown): Promise<T> {
-    let response: Response;
+    const response = await this.rawPost(path, body);
+    if (!response.ok) {
+      throw new NlpServiceUnavailableException({ status: response.status });
+    }
+    return (await response.json()) as T;
+  }
+
+  private async rawPost(path: string, body: unknown): Promise<Response> {
     try {
-      response = await fetch(`${this.baseUrl}${path}`, {
+      return await fetch(`${this.baseUrl}${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -51,11 +71,5 @@ export class NlpClientService {
         message: error instanceof Error ? error.message : String(error),
       });
     }
-
-    if (!response.ok) {
-      throw new NlpServiceUnavailableException({ status: response.status });
-    }
-
-    return (await response.json()) as T;
   }
 }

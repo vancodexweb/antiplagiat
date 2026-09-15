@@ -8,9 +8,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.routers import embeddings, lemmatize
+from app.routers import embeddings, lemmatize, perplexity
 from app.services.embeddings import get_model
 from app.services.lemmatizer import get_morph
+from app.services.perplexity import is_enabled as perplexity_enabled
 
 
 @asynccontextmanager
@@ -19,6 +20,12 @@ async def lifespan(app: FastAPI):
     # первый реальный запрос не ждал их загрузки (несколько секунд).
     get_model()
     get_morph()
+    # Модель перплексии — тяжёлая опциональная фича (раздел 3.3), грузим
+    # только если явно включена флагом; иначе endpoint отвечает 503.
+    if perplexity_enabled():
+        from app.services.perplexity import _load
+
+        _load()
     yield
 
 

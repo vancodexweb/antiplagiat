@@ -28,3 +28,14 @@ class SentenceEmbeddingItem(BaseModel):
 class EmbedSentencesResponse(BaseModel):
     model: str = Field(..., description="Название модели, которой посчитаны эмбеддинги")
     sentences: list[SentenceEmbeddingItem] = Field(..., description="Предложения текста вместе с их эмбеддингами")
+
+
+class PerplexityRequest(BaseModel):
+    text: str = Field(..., description="Текст для расчёта перплексии")
+
+
+class PerplexityResponse(BaseModel):
+    perplexity: float = Field(
+        ...,
+        description="Перплексия текста по языковой модели — чем ниже, тем 'предсказуемее' текст для модели (часто характерно для ИИ-сгенерированного)",
+    )

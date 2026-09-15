@@ -8,6 +8,7 @@ import { SettingsModule } from './settings/settings.module';
 import { DocumentsModule } from './documents/documents.module';
 import { CorpusModule } from './corpus/corpus.module';
 import { JunkWordsModule } from './junk-words/junk-words.module';
+import { DetectorWeightsModule } from './detector-weights/detector-weights.module';
 import { DictionarySeedModule } from './dictionary-seed/dictionary-seed.module';
 import { HealthController } from './health/health.controller';
 
@@ -30,6 +31,7 @@ import { HealthController } from './health/health.controller';
     DocumentsModule,
     CorpusModule,
     JunkWordsModule,
+    DetectorWeightsModule,
     DictionarySeedModule,
   ],
   controllers: [HealthController],
