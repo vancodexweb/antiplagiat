@@ -19,6 +19,19 @@ interface PlagiarismDetails {
   sources: PlagiarismSource[];
 }
 
+interface SelfPlagiarismSource {
+  documentId: string;
+  originalName: string;
+  matchedShingles: number;
+}
+
+interface SelfPlagiarismDetails {
+  enabled: boolean;
+  totalShingles: number;
+  matchedShingles: number;
+  sources: SelfPlagiarismSource[];
+}
+
 /**
  * Точное дублирование (раздел 3.2 ТЗ): шинглы документа сверяются с
  * корпусом через LSH-кандидатов (быстрый отбор) и затем точным
@@ -36,6 +49,7 @@ export class PlagiarismService {
   ) {}
 
   async analyze(documentId: string, rawText: string): Promise<void> {
+    const document = await this.prisma.document.findUnique({ where: { id: documentId }, select: { authorId: true } });
     const shingles = this.shingling.generateShingles(rawText);
 
     // Предыдущий анализ (если это повторная обработка) не должен оставлять
@@ -48,9 +62,17 @@ export class PlagiarismService {
     }
 
     if (shingles.length === 0) {
-      await this.writeResult(documentId, { shingleSize: this.shingling.windowSize, totalShingles: 0, matchedShingles: 0, sources: [] }, 0);
+      await this.writeResult(
+        documentId,
+        { shingleSize: this.shingling.windowSize, totalShingles: 0, matchedShingles: 0, sources: [] },
+        0,
+        { enabled: Boolean(document?.authorId), totalShingles: 0, matchedShingles: 0, sources: [] },
+        0,
+      );
       return;
     }
+
+    const selfPlagiarism = await this.computeSelfPlagiarism(documentId, document?.authorId ?? null, shingles);
 
     // Кандидатов ищем по каждому окну шинглов отдельно (см. chunk-shingles.ts),
     // чтобы найти совпадение, даже если скопирован только один абзац.
@@ -65,6 +87,8 @@ export class PlagiarismService {
         documentId,
         { shingleSize: this.shingling.windowSize, totalShingles: shingles.length, matchedShingles: 0, sources: [] },
         0,
+        selfPlagiarism.details,
+        selfPlagiarism.pct,
       );
       return;
     }
@@ -104,13 +128,75 @@ export class PlagiarismService {
         sources,
       },
       plagiarismPct,
+      selfPlagiarism.details,
+      selfPlagiarism.pct,
     );
 
     this.logger.log(`Документ ${documentId}: plagiarismPct=${plagiarismPct}% (кандидатов: ${candidateIds.length})`);
   }
 
-  private async writeResult(documentId: string, details: PlagiarismDetails, plagiarismPct: number): Promise<void> {
+  // Самоплагиат (раздел 3.2 ТЗ, поле selfPlagiarismPct схемы): сверка
+  // выполняется не с корпусом, а с шинглами предыдущих документов ТОГО ЖЕ
+  // автора (Document.authorId) — включается автоматически, когда документ
+  // загружен с authorEmail. Отдельного LSH-индекса не требуется: у одного
+  // автора документов немного, точный запрос по индексу hash в Postgres
+  // (Shingle.@@index([hash])) достаточно быстр без дополнительной инфраструктуры.
+  private async computeSelfPlagiarism(
+    documentId: string,
+    authorId: string | null,
+    shingles: { hashHex: string }[],
+  ): Promise<{ details: SelfPlagiarismDetails; pct: number }> {
+    if (!authorId) {
+      return { details: { enabled: false, totalShingles: 0, matchedShingles: 0, sources: [] }, pct: 0 };
+    }
+
+    const otherDocuments = await this.prisma.document.findMany({
+      where: { authorId, id: { not: documentId } },
+      select: { id: true, originalName: true },
+    });
+    if (otherDocuments.length === 0) {
+      return { details: { enabled: true, totalShingles: shingles.length, matchedShingles: 0, sources: [] }, pct: 0 };
+    }
+
+    const documentHashes = shingles.map((s) => s.hashHex);
+    const otherDocIds = otherDocuments.map((d) => d.id);
+
+    const matches = await this.prisma.shingle.findMany({
+      where: { documentId: { in: otherDocIds }, hash: { in: documentHashes } },
+      select: { hash: true, documentId: true },
+    });
+
+    const matchedHashSet = new Set(matches.map((m) => m.hash));
+    const matchedByDoc = new Map<string, number>();
+    for (const match of matches) {
+      matchedByDoc.set(match.documentId, (matchedByDoc.get(match.documentId) ?? 0) + 1);
+    }
+
+    const sources: SelfPlagiarismSource[] = otherDocuments
+      .filter((doc) => matchedByDoc.has(doc.id))
+      .map((doc) => ({
+        documentId: doc.id,
+        originalName: doc.originalName,
+        matchedShingles: matchedByDoc.get(doc.id) ?? 0,
+      }));
+
+    const pct = shingles.length > 0 ? Math.round((matchedHashSet.size / shingles.length) * 1000) / 10 : 0;
+
+    return {
+      details: { enabled: true, totalShingles: shingles.length, matchedShingles: matchedHashSet.size, sources },
+      pct,
+    };
+  }
+
+  private async writeResult(
+    documentId: string,
+    details: PlagiarismDetails,
+    plagiarismPct: number,
+    selfPlagiarismDetails: SelfPlagiarismDetails,
+    selfPlagiarismPct: number,
+  ): Promise<void> {
     await this.results.mergeDetails(documentId, 'plagiarism', details, { plagiarismPct });
+    await this.results.mergeDetails(documentId, 'selfPlagiarism', selfPlagiarismDetails, { selfPlagiarismPct });
     await this.results.recomputeOriginality(documentId);
   }
 }

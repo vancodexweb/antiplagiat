@@ -32,7 +32,6 @@ async function bootstrap(): Promise<void> {
     .addTag('Документы', 'Загрузка документов и получение результатов проверки')
     .addTag('Корпус', 'Эталонный корпус документов для сверки на заимствования')
     .addTag('Конфигурация', 'Настраиваемые параметры системы: веса детектора ИИ, словари, нормативы')
-    .addTag('Аналитика', 'Сводная аналитика по проверенным документам')
     .build();
   const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('api/docs', app, swaggerDocument);

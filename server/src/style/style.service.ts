@@ -8,6 +8,10 @@ import { STOPWORDS } from './stopwords';
 const LONG_SENTENCE_WORD_THRESHOLD = 25;
 const VOWELS = new Set('аеёиоуыэюя');
 
+// Цитаты в кавычках-«ёлочках» и в прямых двойных кавычках — два стиля
+// оформления, реально встречающихся в русских текстах.
+const QUOTE_PATTERNS = [/«([^«»]+)»/gu, /"([^"]+)"/gu];
+
 // Возвратные глаголы в характерных для страдательного залога формах
 // (делается, решается, был выполнен и т.п.) — упрощённая эвристика без
 // полноценного морфологического разбора, но она ловит самый частый в
@@ -45,10 +49,31 @@ export class StyleService {
     const passiveVoicePct = this.computePassiveVoicePct(sentences);
     const wordRepetitions = this.countAdjacentRepetitions(sentences);
     const { bureaucracyPct, matchedCliches } = await this.computeBureaucracyPct(sentences);
+    const citedPct = this.computeCitedPct(rawText);
 
     const details: StyleDetails = { longSentencesPct, passiveVoicePct, bureaucracyPct, wordRepetitions, matchedCliches };
 
-    await this.results.mergeDetails(documentId, 'style', details, { readabilityScore });
+    await this.results.mergeDetails(documentId, 'style', details, { readabilityScore, citedPct });
+  }
+
+  // Доля текста, оформленного как цитата (раздел 5 схемы — citedPct):
+  // считаем по доле непробельных символов внутри кавычек («...» и "...").
+  // Это чисто текстовая метрика оформления, не проверка на заимствование —
+  // она не влияет на plagiarismPct/originalityPct.
+  private computeCitedPct(text: string): number {
+    const totalCharsNoSpaces = Array.from(text).filter((ch) => !/\s/u.test(ch)).length;
+    if (totalCharsNoSpaces === 0) return 0;
+
+    let quotedChars = 0;
+    for (const pattern of QUOTE_PATTERNS) {
+      pattern.lastIndex = 0;
+      let match: RegExpExecArray | null;
+      while ((match = pattern.exec(text)) !== null) {
+        quotedChars += Array.from(match[1]).filter((ch) => !/\s/u.test(ch)).length;
+      }
+    }
+
+    return Math.round((quotedChars / totalCharsNoSpaces) * 1000) / 10;
   }
 
   // Адаптация формулы Флеша-Кинкейда для русского языка (И.В. Оборнева):
